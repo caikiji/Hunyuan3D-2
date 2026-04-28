@@ -145,9 +145,10 @@ def load_image_from_base64(image):
 
 class ModelWorker:
     def __init__(self,
-                 model_path='tencent/Hunyuan3D-2mini',
+                 model_path='tencent/Hunyuan3D-2',
                  tex_model_path='tencent/Hunyuan3D-2',
-                 subfolder='hunyuan3d-dit-v2-mini-turbo',
+                 subfolder='hunyuan3d-dit-v2-0',
+                 tex_subfolder='hunyuan3d-paint-v2-0',
                  device='cuda',
                  enable_tex=False):
         self.model_path = model_path
@@ -162,13 +163,13 @@ class ModelWorker:
             use_safetensors=True,
             device=device,
         )
-        self.pipeline.enable_flashvdm(mc_algo='mc')
+        self.pipeline.enable_flashvdm(mc_algo='mc', replace_vae=False)
         # self.pipeline_t2i = HunyuanDiTPipeline(
         #     'Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled',
         #     device=device
         # )
         if enable_tex:
-            self.pipeline_tex = Hunyuan3DPaintPipeline.from_pretrained(tex_model_path)
+            self.pipeline_tex = Hunyuan3DPaintPipeline.from_pretrained(tex_model_path, subfolder=tex_subfolder)
 
     def get_queue_length(self):
         if model_semaphore is None:
@@ -203,8 +204,8 @@ class ModelWorker:
         else:
             seed = params.get("seed", 1234)
             params['generator'] = torch.Generator(self.device).manual_seed(seed)
-            params['octree_resolution'] = params.get("octree_resolution", 128)
-            params['num_inference_steps'] = params.get("num_inference_steps", 5)
+            params['octree_resolution'] = params.get("octree_resolution", 192)
+            params['num_inference_steps'] = params.get("num_inference_steps", 20)
             params['guidance_scale'] = params.get('guidance_scale', 5.0)
             params['mc_algo'] = 'mc'
             import time
@@ -215,7 +216,7 @@ class ModelWorker:
         if params.get('texture', False):
             mesh = FloaterRemover()(mesh)
             mesh = DegenerateFaceRemover()(mesh)
-            mesh = FaceReducer()(mesh, max_facenum=params.get('face_count', 40000))
+            mesh = FaceReducer()(mesh, max_facenum=params.get('face_count', 60000))
             mesh = self.pipeline_tex(mesh, image)
 
         type = params.get('type', 'glb')
