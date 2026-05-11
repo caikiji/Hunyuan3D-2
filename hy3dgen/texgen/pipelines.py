@@ -99,12 +99,12 @@ class Hunyuan3DPaintPipeline:
         # empty cude cache
         torch.cuda.empty_cache()
         # Load model
-        self.models['delight_model'] = Light_Shadow_Remover(self.config)
+#         self.models['delight_model'] = Light_Shadow_Remover(self.config)
         self.models['multiview_model'] = Multiview_Diffusion_Net(self.config)
         # self.models['super_model'] = Image_Super_Net(self.config)
 
     def enable_model_cpu_offload(self, gpu_id: Optional[int] = None, device: Union[torch.device, str] = "cuda"):
-        self.models['delight_model'].pipeline.enable_model_cpu_offload(gpu_id=gpu_id, device=device)
+        # self.models['delight_model'].pipeline.enable_model_cpu_offload(gpu_id=gpu_id, device=device)
         self.models['multiview_model'].pipeline.enable_model_cpu_offload(gpu_id=gpu_id, device=device)
 
     def render_normal_multiview(self, camera_elevs, camera_azims, use_abs_coor=True):
@@ -202,7 +202,7 @@ class Hunyuan3DPaintPipeline:
             
         images_prompt = [self.recenter_image(image_prompt) for image_prompt in images_prompt]
 
-        images_prompt = [self.models['delight_model'](image_prompt) for image_prompt in images_prompt]
+#         images_prompt = [self.models['delight_model'](image_prompt) for image_prompt in images_prompt]
 
         mesh = mesh_uv_wrap(mesh)
 

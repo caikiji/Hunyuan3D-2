@@ -147,7 +147,7 @@ class ModelWorker:
     def __init__(self,
                  model_path='tencent/Hunyuan3D-2',
                  tex_model_path='tencent/Hunyuan3D-2',
-                 subfolder='hunyuan3d-dit-v2-0',
+                 subfolder='hunyuan3d-dit-v2-mini',
                  tex_subfolder='hunyuan3d-paint-v2-0',
                  device='cuda',
                  enable_tex=False):
@@ -160,7 +160,7 @@ class ModelWorker:
         self.pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
             model_path,
             subfolder=subfolder,
-            use_safetensors=True,
+            use_safetensors=False,
             device=device,
         )
         self.pipeline.enable_flashvdm(mc_algo='mc', replace_vae=False)
@@ -213,7 +213,7 @@ class ModelWorker:
             mesh = self.pipeline(**params)[0]
             logger.info("--- %s seconds ---" % (time.time() - start_time))
 
-        if params.get('texture', False):
+        if params.get('texture', False) and hasattr(self, 'pipeline_tex'):
             mesh = FloaterRemover()(mesh)
             mesh = DegenerateFaceRemover()(mesh)
             mesh = FaceReducer()(mesh, max_facenum=params.get('face_count', 60000))
