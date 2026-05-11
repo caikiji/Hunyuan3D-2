@@ -157,11 +157,15 @@ class ModelWorker:
         logger.info(f"Loading the model {model_path} on worker {worker_id} ...")
 
         self.rembg = BackgroundRemover()
+        print(f"Loading 2mv model from {model_path}/{subfolder}")
+        import huggingface_hub.utils._validators as _hf_val
+        _hf_val.validate_repo_id = lambda x: None
         self.pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
             model_path,
             subfolder=subfolder,
-            use_safetensors=False,
+            variant='fp16',
             device=device,
+            local_files_only=True,
         )
         self.pipeline.enable_flashvdm(mc_algo='mc', replace_vae=False)
         # self.pipeline_t2i = HunyuanDiTPipeline(
@@ -187,17 +191,15 @@ class ModelWorker:
     @torch.inference_mode()
     def generate(self, uid, params):
         if 'image' in params:
-            image = params["image"]
-            image = load_image_from_base64(image)
-        else:
-            if 'text' in params:
-                text = params["text"]
-                image = self.pipeline_t2i(text)
-            else:
-                raise ValueError("No input image or text provided")
-
-        image = self.rembg(image)
-        params['image'] = image
+            params['image'] = load_image_from_base64(params["image"])
+        elif 'imgs' in params:
+            imgs = params["imgs"]
+            views = ['front', 'left', 'right', 'back']
+            mv_dict = {}
+            for i, b64 in enumerate(imgs[:4]):
+                pil = load_image_from_base64(b64)
+                mv_dict[views[i]] = self.rembg(pil)
+            params['image'] = mv_dict
 
         if 'mesh' in params:
             mesh = trimesh.load(BytesIO(base64.b64decode(params["mesh"])), file_type='glb')
@@ -217,7 +219,8 @@ class ModelWorker:
             mesh = FloaterRemover()(mesh)
             mesh = DegenerateFaceRemover()(mesh)
             mesh = FaceReducer()(mesh, max_facenum=params.get('face_count', 60000))
-            mesh = self.pipeline_tex(mesh, image)
+            ref_img = params['image'].get('front', list(params['image'].values())[0]) if isinstance(params['image'], dict) else params['image']
+            mesh = self.pipeline_tex(mesh, ref_img)
 
         type = params.get('type', 'glb')
         with tempfile.NamedTemporaryFile(suffix=f'.{type}', delete=False) as temp_file:
@@ -303,7 +306,9 @@ if __name__ == "__main__":
     parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8081)
     parser.add_argument("--model_path", type=str, default='tencent/Hunyuan3D-2mini')
+    parser.add_argument("--subfolder", type=str, default='hunyuan3d-dit-v2-mini')
     parser.add_argument("--tex_model_path", type=str, default='tencent/Hunyuan3D-2')
+    parser.add_argument('--tex_subfolder', type=str, default='hunyuan3d-paint-v2-0')
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--limit-model-concurrency", type=int, default=5)
     parser.add_argument('--enable_tex', action='store_true')
@@ -312,6 +317,6 @@ if __name__ == "__main__":
 
     model_semaphore = asyncio.Semaphore(args.limit_model_concurrency)
 
-    worker = ModelWorker(model_path=args.model_path, device=args.device, enable_tex=args.enable_tex,
-                         tex_model_path=args.tex_model_path)
+    worker = ModelWorker(model_path=args.model_path, subfolder=args.subfolder, device=args.device, enable_tex=args.enable_tex,
+                         tex_model_path=args.tex_model_path, tex_subfolder=args.tex_subfolder)
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
